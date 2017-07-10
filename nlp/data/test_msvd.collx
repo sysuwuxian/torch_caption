@@ -1,0 +1,87 @@
+1	a	_	DET	DT	_	2	det	_	_
+2	monkey	_	NOUN	NN	_	4	nsubj	_	_
+3	is	_	AUX	VBZ	_	4	aux	_	_
+4	playing	_	VERB	VBG	_	0	root	_	_
+5	with	_	ADP	IN	_	4	prep	_	_
+6	a	_	DET	DT	_	7	det	_	_
+7	dog	_	NOUN	NN	_	5	pobj	_	_
+8	.	_	PUNCT	.	_	4	punct	_	_
+
+1	a	_	DET	DT	_	2	det	_	_
+2	woman	_	NOUN	NN	_	4	nsubj	_	_
+3	is	_	AUX	VBZ	_	4	aux	_	_
+4	riding	_	VERB	VBG	_	0	root	_	_
+5	a	_	DET	DT	_	6	det	_	_
+6	motorcycle	_	NOUN	NN	_	4	dobj	_	_
+7	.	_	PUNCT	.	_	4	punct	_	_
+
+1	a	_	DET	DT	_	2	det	_	_
+2	cat	_	NOUN	NN	_	4	nsubj	_	_
+3	is	_	AUX	VBZ	_	4	aux	_	_
+4	licking	_	VERB	VBG	_	0	root	_	_
+5	a	_	DET	DT	_	6	det	_	_
+6	bug	_	NOUN	NN	_	4	dobj	_	_
+7	.	_	PUNCT	.	_	4	punct	_	_
+
+1	a	_	DET	DT	_	2	det	_	_
+2	man	_	NOUN	NN	_	4	nsubj	_	_
+3	is	_	AUX	VBZ	_	4	aux	_	_
+4	talking	_	VERB	VBG	_	0	root	_	_
+5	to	_	ADP	TO	_	4	prep	_	_
+6	a	_	DET	DT	_	7	det	_	_
+7	woman	_	NOUN	NN	_	5	pobj	_	_
+8	.	_	PUNCT	.	_	4	punct	_	_
+
+1	a	_	DET	DT	_	2	det	_	_
+2	man	_	NOUN	NN	_	4	nsubj	_	_
+3	is	_	AUX	VBZ	_	4	aux	_	_
+4	taking	_	VERB	VBG	_	0	root	_	_
+5	a	_	DET	DT	_	6	det	_	_
+6	pistol	_	NOUN	NN	_	4	dobj	_	_
+7	.	_	PUNCT	.	_	4	punct	_	_
+
+1	a	_	DET	DT	_	2	det	_	_
+2	man	_	NOUN	NN	_	4	nsubj	_	_
+3	is	_	AUX	VBZ	_	4	aux	_	_
+4	eating	_	VERB	VBG	_	0	root	_	_
+5	a	_	DET	DT	_	6	det	_	_
+6	piece	_	NOUN	NN	_	4	dobj	_	_
+7	of	_	ADP	IN	_	6	prep	_	_
+8	paper	_	NOUN	NN	_	7	pobj	_	_
+9	.	_	PUNCT	.	_	4	punct	_	_
+
+1	a	_	DET	DT	_	2	det	_	_
+2	man	_	NOUN	NN	_	4	nsubj	_	_
+3	is	_	AUX	VBZ	_	4	aux	_	_
+4	doing	_	VERB	VBG	_	0	root	_	_
+5	some	_	DET	DT	_	6	det	_	_
+6	sort	_	NOUN	NN	_	4	dobj	_	_
+7	of	_	ADP	IN	_	6	prep	_	_
+8	people	_	NOUN	NNS	_	7	pobj	_	_
+9	.	_	PUNCT	.	_	4	punct	_	_
+
+1	a	_	DET	DT	_	2	det	_	_
+2	woman	_	NOUN	NN	_	4	nsubj	_	_
+3	is	_	AUX	VBZ	_	4	aux	_	_
+4	feeding	_	VERB	VBG	_	0	root	_	_
+5	a	_	DET	DT	_	6	det	_	_
+6	baby	_	NOUN	NN	_	4	dobj	_	_
+7	.	_	PUNCT	.	_	4	punct	_	_
+
+1	a	_	DET	DT	_	2	det	_	_
+2	cat	_	NOUN	NN	_	4	nsubj	_	_
+3	is	_	AUX	VBZ	_	4	aux	_	_
+4	licking	_	VERB	VBG	_	0	root	_	_
+5	a	_	DET	DT	_	6	det	_	_
+6	bottle	_	NOUN	NN	_	4	dobj	_	_
+7	.	_	PUNCT	.	_	4	punct	_	_
+
+1	a	_	DET	DT	_	2	det	_	_
+2	cat	_	NOUN	NN	_	4	nsubj	_	_
+3	is	_	AUX	VBZ	_	4	aux	_	_
+4	playing	_	VERB	VBG	_	0	root	_	_
+5	with	_	ADP	IN	_	4	prep	_	_
+6	a	_	DET	DT	_	7	det	_	_
+7	cat	_	NOUN	NN	_	5	pobj	_	_
+8	.	_	PUNCT	.	_	4	punct	_	_
+

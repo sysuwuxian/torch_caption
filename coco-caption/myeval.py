@@ -13,7 +13,7 @@ import sys
 input_json = sys.argv[1]
 
 
-annFile = 'annotations/captions_val2014.json'
+annFile = '../data/charades_ref.json'
 coco = COCO(annFile)
 valids = coco.getImgIds()
 

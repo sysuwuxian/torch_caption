@@ -48,6 +48,16 @@ function utils.dict_average(dicts)
   return dict
 end
 
+
+function utils.in_table(dict, v)
+  if dict[v] == nil then
+    return false 
+  else
+    return true 
+  end
+end
+
+
 -- seriously this is kind of ridiculous
 function utils.count_keys(t)
   local n = 0
@@ -68,4 +78,88 @@ function utils.average_values(t)
   return vsum / n
 end
 
+function utils.is_empty(t)
+  return next(t) == nil
+end
+
+function utils.change(t)
+  local c = {}
+  local h = {}
+  local batch_size = #t
+  for i = batch_size, 1, -1  do
+    t1 = t[i]
+    for k1, v1 in pairs(t1) do
+      assert(v1:dim() == 1)
+      
+      if k1 == 1 then
+        table.insert(c, v1)
+      else
+        table.insert(h, v1)
+      end
+    end
+  end
+  return {nn.JoinTable(2):forward(c), nn.JoinTable(2):forward(h)} 
+end
+
+function utils.add(a, b)
+  if a == nil then
+    a = b
+  else
+    a:add(b)
+  end
+
+end
+
+function utils.save(filename, t)
+  file = io.open(filename, 'w')
+  for k, v in pairs(t) do
+    file:write(v .. ' ')
+  end
+  file:close()
+end
+
+function utils.modify(voc_sz, index, sent)
+    -- must notice that classify the two situations
+    -- INDEX == -1 : VOC_SZ + 1
+    -- INDEX == 0: VOC_SZ + 2
+    if index == -1 then
+        return (voc_sz + 1) 
+    elseif index == 0 then 
+        return (voc_sz + 2)
+    else
+        return sent[index]
+    end 
+end
+
+function utils.getChenFeat(voc_sz, c, sent)
+    fWord = {}
+    -- top 3 elements in stack
+    for i = 2, 0, -1 do
+        index = c:getStack(i)
+        table.insert(fWord, utils.modify(voc_sz, index, sent))
+    end
+    -- left / right - left(left) / right(right)
+    for i = 0, 1 do
+        k = c:getStack(i)
+        index = c:getLeftChild(k, 1)
+        table.insert(fWord, utils.modify(voc_sz, index, sent))
+
+        index = c:getRightChild(k, 1)
+        table.insert(fWord, utils.modify(voc_sz, index, sent))
+        
+        index = c:getLeftChild(k, 2)
+        table.insert(fWord, utils.modify(voc_sz, index, sent))
+
+        index = c:getRightChild(k, 2)
+        table.insert(fWord, utils.modify(voc_sz, index, sent))
+
+        index = c:getLeftChild(c:getLeftChild(k, 1), 1)
+        table.insert(fWord, utils.modify(voc_sz, index, sent))
+
+        index = c:getRightChild(c:getRightChild(k, 1), 1)
+        table.insert(fWord, utils.modify(voc_sz, index, sent))
+    end
+    assert(#fWord == 15)
+    return fWord
+end
 return utils

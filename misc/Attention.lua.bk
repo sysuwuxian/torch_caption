@@ -1,0 +1,36 @@
+require 'nn'
+require 'nngraph'
+require 'misc.maskSoftMax'
+
+local attention = {}
+function attention.soft_attention(input_size_img, rnn_size, img_seq_size)
+  local inputs = {}
+  table.insert(inputs, nn.Identity()()) -- feat 
+  table.insert(inputs, nn.Identity()()) -- mask 
+  table.insert(inputs, nn.Identity()()) -- h 
+
+  local img_feat = inputs[1]
+  local mask = inputs[2]
+  local h = inputs[3]
+
+  local outputs = {}
+
+  local h_embed = nn.Linear(rnn_size, rnn_size)(h)
+  local h_replicate = nn.Replicate(img_seq_size,2)(h_embed)
+
+  local img_embed_dim = nn.Linear(input_size_img, rnn_size)(nn.View(-1, input_size_img)(img_feat))
+  local img_embed = nn.View(-1, img_seq_size, rnn_size)(img_embed_dim)
+  local feat = nn.Dropout(0.5)(nn.Tanh()(nn.CAddTable()({img_embed, h_replicate})))
+  
+  local h3 = nn.Linear(rnn_size, 1)(nn.View(-1, rnn_size)(feat))
+  local P3 = nn.maskSoftMax()({nn.View(-1, img_seq_size)(h3),mask})
+
+  local probs3dim = nn.View(1,-1):setNumInputDims(1)(P3)
+  local imgAtt = nn.MM(false, false)({probs3dim, img_feat})
+  local img_atten_feat = nn.View(-1, input_size_img)(imgAtt)
+
+  table.insert(outputs, img_atten_feat)
+
+  return nn.gModule(inputs, outputs)
+end
+return attention
