@@ -146,7 +146,7 @@ function layer:sample_beam(input, opt)
 
     while true do
       local cols = math.min(beam_size, #candidates)
-      local rows = beam_size
+      local rows = utils.is_empty(sents[1]) and 1 or beam_size
 
       for q=1,rows do -- for each beam expansion
         -- local config, tree, t
