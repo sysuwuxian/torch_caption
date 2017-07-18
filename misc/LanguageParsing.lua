@@ -95,14 +95,13 @@ end
 
 
 function layer:sample_beam(input, opt)
-  local beam_size = utils.getopt(opt, 'beam_size', 6)
+  local beam_size = utils.getopt(opt, 'beam_size', 1)
   local init_state = input[1]
   local all_trees = input[2]
   local nlp_model = input[3]
   
   local batch_size = #all_trees
 
-  local MAX_LEN = opt.
   local function compare(a, b) return a.p > b.p end -- used downstream
 
   assert(beam_size <= self.vocab_size+1, 'lets assume this for now')
@@ -119,16 +118,15 @@ function layer:sample_beam(input, opt)
     local states = {}
     trees[1] = all_trees[k]
 
-
     for i=1, beam_size do
       states[i] = {init_state[1][k]:clone(), init_state[2][k]:clone()}
       configs[i] = system:initialConfig(self.seq_length)
       sents[i] = {}
       -- init tree
       if i > 1 then
-        trees[i] = new Tree(trees[1].n, trees[1].dim, trees[1].len, 
-               trees[1].vid_name)
-        trees[i].set(trees[1].feat, trees[1].mask)      
+        trees[i] = Tree(trees[1].n, trees[1].dim, trees[1].len, 
+               trees[1].ptr, trees[1].vid_name)
+        trees[i]:set(trees[1].feat, trees[1].mask)
       end
     end
     -- we will write output predictions into tensor seq
@@ -139,9 +137,16 @@ function layer:sample_beam(input, opt)
     local logprobs -- logprobs predicted in last time step, shape (beam_size, vocab_size + 1)
     local done_beams = {}
 
-    for t = 1, MAX_LEN do
-      local cols = math.min(beam_size, vocab_size)
-      local rows = utils.is_empty(sents[1]) and 1 or beam_size
+    -- set begin rows, start with 1
+    local rows = 1
+    while true do
+      local cols = math.min(beam_size, self.vocab_size)
+      local candidates = {}
+
+      if rows == 0 then
+        break
+      end
+
 
       for q=1,rows do -- for each beam expansion
         -- local config, tree, t
@@ -171,7 +176,7 @@ function layer:sample_beam(input, opt)
           -- get the corresponding inputs, mask, is_leaf for backward
           local it, word
           if utils.is_empty(sent) then
-            word = vocab_size + 1
+            word = self.vocab_size + 1
           else
             word = sent[#sent]
           end
@@ -193,6 +198,8 @@ function layer:sample_beam(input, opt)
           -- find the relation between word and region
           local att_w = out[self.num_state+2]:float() 
           local _, id = torch.max(att_w, 2)
+          
+          local cnt = #tree.word2region + 1
           -- mapping current word to corresponding region
           tree.word2region[cnt] = id[1][1]
           
@@ -204,12 +211,13 @@ function layer:sample_beam(input, opt)
             end
           end
 
-          ys,ix = torch.sort(logprobs,2,true)
+          ys,ix = torch.sort(logprobs,true)
+
           for c=1,cols do
             -- compute logprob of expanding beam q with word in sorted position c
             local local_logprob = ys[{c}]
             local candidate_logprob = beam_logprobs_sum[q] + local_logprob
-            table.insert(candidates, {c=ix[q], q=q, p=candidate_logprob, r=local_logprob})
+            table.insert(candidates, {c=ix[c], q=q, p=candidate_logprob, r=local_logprob})
           end
         
         elseif trans_state == 2 then
@@ -230,7 +238,7 @@ function layer:sample_beam(input, opt)
           table.insert(candidates, {c=-1, q=q, p=candidate_logprob, r=local_logprob})
         end
         
-        system:apply(config, state)
+        system:apply(config, trans_state)
       end
 
       table.sort(candidates, compare)
@@ -244,36 +252,30 @@ function layer:sample_beam(input, opt)
       -- update new beams
       for vix=1, beam_size do
         local v = candidates[vix]
-        
-        --[[
-        -- fork beam index q into index vix
-        if v.t > 2 then
-          beam_seq[{ {1,t-2}, vix }] = beam_seq_prev[{ {}, v.q }]
-        end
-        ]]--
-
         -- update new sent
         new_sents[vix] = sents[v.q]
 
         -- append new end terminal at the end of beam
         if v.c ~= -1 then
-          beam_seq[{ t-1, vix }] = v.c
           table.insert(new_sents[vix], v.c)
         end
         beam_logprobs_sum[vix] = v.p
 
-          -- update tree & state
-        new_states[vix] = states[v.q]
-        new_trees[vix] = trees[v.q]
-        new_configs[vix] = configs[v.q]
-
-        if v.c == self.vocab_size+1 then
-          table.insert(done_beams, {seq = torch.tensor(new_sents[vix]), 
-                                    p = beam_logprobs_sum[vix]})
+        if v.c == self.vocab_size+1 then  
+          table.insert(done_beams, {seq = torch.Tensor(new_sents[vix]), 
+                        p = beam_logprobs_sum[vix]})
+        
+        elseif not system:isterminal(configs[v.q]) then
+          
+          -- update new states / tress / configs
+          table.insert(new_states, state[v.q])
+          table.insert(new_trees, trees[v.q])
+          table.insert(new_configs, configs[v.q])
         end
       
       end
 
+      rows = utils.count_keys(new_configs) 
       states = new_states
       trees = new_trees
       configs = new_configs
