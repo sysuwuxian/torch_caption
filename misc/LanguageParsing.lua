@@ -142,19 +142,16 @@ function layer:sample_beam(input, opt)
     while true do
       local cols = math.min(beam_size, self.vocab_size)
       local candidates = {}
-
       if rows == 0 then
         break
       end
-
-
+      
       for q=1,rows do -- for each beam expansion
         -- local config, tree, t
         local tree = trees[q]
         local config = configs[q]
         local state = states[q]
         local sent = sents[q]
-
 
         local feats = torch.Tensor(utils.getChenFeat(#self.voc, c, sent))
         feats = feats:cuda()
