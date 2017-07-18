@@ -102,6 +102,7 @@ function layer:sample_beam(input, opt)
   
   local batch_size = #all_trees
 
+  local MAX_LEN = opt.
   local function compare(a, b) return a.p > b.p end -- used downstream
 
   assert(beam_size <= self.vocab_size+1, 'lets assume this for now')
@@ -111,8 +112,6 @@ function layer:sample_beam(input, opt)
   local system = arcstandard()
 
   for k=1, batch_size do 
-
-
     -- init tree / config / sent
     local trees = {}
     local configs = {}
@@ -123,19 +122,15 @@ function layer:sample_beam(input, opt)
 
     for i=1, beam_size do
       states[i] = {init_state[1][k]:clone(), init_state[2][k]:clone()}
-
-      if i >= 1 then
-        configs[i] = system:initialConfig(self.seq_length)
-        sents[i] = {}
-      else
-        -- init tree
+      configs[i] = system:initialConfig(self.seq_length)
+      sents[i] = {}
+      -- init tree
+      if i > 1 then
         trees[i] = new Tree(trees[1].n, trees[1].dim, trees[1].len, 
-            trees[1].vid_name)
+               trees[1].vid_name)
         trees[i].set(trees[1].feat, trees[1].mask)      
       end
-
     end
-
     -- we will write output predictions into tensor seq
     local beam_seq = torch.LongTensor(self.seq_length, beam_size):zero()
     local beam_seq_logprobs = torch.FloatTensor(self.seq_length, beam_size):zero()
@@ -144,8 +139,8 @@ function layer:sample_beam(input, opt)
     local logprobs -- logprobs predicted in last time step, shape (beam_size, vocab_size + 1)
     local done_beams = {}
 
-    while true do
-      local cols = math.min(beam_size, #candidates)
+    for t = 1, MAX_LEN do
+      local cols = math.min(beam_size, vocab_size)
       local rows = utils.is_empty(sents[1]) and 1 or beam_size
 
       for q=1,rows do -- for each beam expansion
@@ -200,7 +195,8 @@ function layer:sample_beam(input, opt)
           local _, id = torch.max(att_w, 2)
           -- mapping current word to corresponding region
           tree.word2region[cnt] = id[1][1]
-
+          
+          -- copying for next use
           if utils.is_empty(sent) then 
             for j = 2, beam_size do
               trees[j].word2region[cnt] = id[1][1]
@@ -248,10 +244,13 @@ function layer:sample_beam(input, opt)
       -- update new beams
       for vix=1, beam_size do
         local v = candidates[vix]
+        
+        --[[
         -- fork beam index q into index vix
         if v.t > 2 then
           beam_seq[{ {1,t-2}, vix }] = beam_seq_prev[{ {}, v.q }]
         end
+        ]]--
 
         -- update new sent
         new_sents[vix] = sents[v.q]
@@ -269,7 +268,8 @@ function layer:sample_beam(input, opt)
         new_configs[vix] = configs[v.q]
 
         if v.c == self.vocab_size+1 then
-          table.insert(done_beams, {seq = beam_seq[{ {}, vix }]:clone()})
+          table.insert(done_beams, {seq = torch.tensor(new_sents[vix]), 
+                                    p = beam_logprobs_sum[vix]})
         end
       
       end
@@ -278,14 +278,11 @@ function layer:sample_beam(input, opt)
       trees = new_trees
       configs = new_configs
       sents = new_sents
-
-
     end
 
     -- sort the model according to the score
     table.sort(done_beams, compare)
     seq[{{}, k}] = done_beams[1].seq -- the first beam has highest cumularive score
-
   end
 
   return seq
