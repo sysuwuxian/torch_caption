@@ -129,9 +129,6 @@ function layer:sample_beam(input, opt)
         trees[i]:set(trees[1].feat, trees[1].mask)
       end
     end
-    -- we will write output predictions into tensor seq
-    local beam_seq = torch.LongTensor(self.seq_length, beam_size):zero()
-    local beam_seq_logprobs = torch.FloatTensor(self.seq_length, beam_size):zero()
     local beam_logprobs_sum = torch.zeros(beam_size)
 
     local logprobs -- logprobs predicted in last time step, shape (beam_size, vocab_size + 1)
@@ -234,7 +231,6 @@ function layer:sample_beam(input, opt)
           local candidate_logprob = beam_logprobs_sum[q] + local_logprob
           table.insert(candidates, {c=-1, q=q, p=candidate_logprob, r=local_logprob})
         end
-        
         system:apply(config, trans_state)
       end
 
@@ -258,14 +254,14 @@ function layer:sample_beam(input, opt)
         end
         beam_logprobs_sum[vix] = v.p
 
-        if v.c == self.vocab_size+1 then  
+        if v.c == self.vocab_size+1 or system:isterminal(configs[v.q]) then  
           table.insert(done_beams, {seq = torch.Tensor(new_sents[vix]), 
                         p = beam_logprobs_sum[vix]})
         
         elseif not system:isterminal(configs[v.q]) then
           
           -- update new states / tress / configs
-          table.insert(new_states, state[v.q])
+          table.insert(new_states, states[v.q])
           table.insert(new_trees, trees[v.q])
           table.insert(new_configs, configs[v.q])
         end
