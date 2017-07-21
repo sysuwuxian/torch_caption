@@ -95,7 +95,10 @@ end
 
 
 function layer:sample_beam(input, opt)
-  local beam_size = utils.getopt(opt, 'beam_size', 1)
+  self.core:forget()
+  self.tree_module:forget()
+  
+  local beam_size = utils.getopt(opt, 'beam_size', 2)
   local init_state = input[1]
   local all_trees = input[2]
   local nlp_model = input[3]
@@ -136,13 +139,14 @@ function layer:sample_beam(input, opt)
 
     -- set begin rows, start with 1
     local rows = 1
+
     while true do
       local cols = math.min(beam_size, self.vocab_size)
       local candidates = {}
       if rows == 0 then
         break
       end
-      
+
       for q=1,rows do -- for each beam expansion
         -- local config, tree, t
         local tree = trees[q]
@@ -185,9 +189,7 @@ function layer:sample_beam(input, opt)
           lstm_state = {}
           assert(out[1]:dim() == 1 and out[2]:dim() == 1)
           for k = 1, self.num_state do table.insert(lstm_state, out[k]) end
-          state = {}
-          state = lstm_state
-
+          states[q] = lstm_state
 
           -- find the relation between word and region
           local att_w = out[self.num_state+2]:float() 
@@ -232,6 +234,7 @@ function layer:sample_beam(input, opt)
           table.insert(candidates, {c=-1, q=q, p=candidate_logprob, r=local_logprob})
         end
         system:apply(config, trans_state)
+      
       end
 
       table.sort(candidates, compare)
@@ -245,17 +248,14 @@ function layer:sample_beam(input, opt)
       -- update new beams
       for vix=1, beam_size do
         local v = candidates[vix]
-        -- update new sent
-        new_sents[vix] = sents[v.q]
-
         -- append new end terminal at the end of beam
         if v.c ~= -1 then
-          table.insert(new_sents[vix], v.c)
+          table.insert(sents[v.q], v.c)
         end
         beam_logprobs_sum[vix] = v.p
 
         if v.c == self.vocab_size+1 or system:isterminal(configs[v.q]) then  
-          table.insert(done_beams, {seq = torch.Tensor(new_sents[vix]), 
+          table.insert(done_beams, {seq = torch.Tensor(sents[v.q]), 
                         p = beam_logprobs_sum[vix]})
         
         elseif not system:isterminal(configs[v.q]) then
@@ -264,20 +264,24 @@ function layer:sample_beam(input, opt)
           table.insert(new_states, states[v.q])
           table.insert(new_trees, trees[v.q])
           table.insert(new_configs, configs[v.q])
+          table.insert(new_sents, sents[v.q])
         end
       
       end
-
       rows = utils.count_keys(new_configs) 
       states = new_states
       trees = new_trees
       configs = new_configs
       sents = new_sents
+
     end
 
     -- sort the model according to the score
     table.sort(done_beams, compare)
-    seq[{{}, k}] = done_beams[1].seq -- the first beam has highest cumularive score
+    local sen_l = done_beams[1].seq:size(1)
+
+    seq[{{1,sen_l}, k}] = done_beams[1].seq -- the first beam has highest cumularive score
+  
   end
 
   return seq
