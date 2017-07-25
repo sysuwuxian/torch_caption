@@ -140,6 +140,8 @@ function layer:sample_beam(input, opt)
     -- set begin rows, start with 1
     local rows = 1
 
+    -- print for test
+    local test_iter = 0
     while true do
       local cols = math.min(beam_size, self.vocab_size)
       local candidates = {}
@@ -154,7 +156,7 @@ function layer:sample_beam(input, opt)
         local state = states[q]
         local sent = sents[q]
 
-        local feats = torch.Tensor(utils.getChenFeat(#self.voc, c, sent))
+        local feats = torch.Tensor(utils.getChenFeat(#self.voc, config, sent))
         feats = feats:cuda()
         local probs = torch.exp(nlp_model:forward(feats):float())
         local trans_state = 0
@@ -234,7 +236,8 @@ function layer:sample_beam(input, opt)
           table.insert(candidates, {c=-1, q=q, p=candidate_logprob, r=local_logprob})
         end
         system:apply(config, trans_state)
-      
+     
+        print('tran state is ', trans_state)
       end
 
       table.sort(candidates, compare)
@@ -249,8 +252,9 @@ function layer:sample_beam(input, opt)
       for vix=1, beam_size do
         local v = candidates[vix]
         -- append new end terminal at the end of beam
+        local sent = utils.shallow_copy(sents[v.q])
         if v.c ~= -1 then
-          table.insert(sents[v.q], v.c)
+          table.insert(sent, v.c)
         end
         beam_logprobs_sum[vix] = v.p
 
@@ -264,7 +268,8 @@ function layer:sample_beam(input, opt)
           table.insert(new_states, states[v.q])
           table.insert(new_trees, trees[v.q])
           table.insert(new_configs, configs[v.q])
-          table.insert(new_sents, sents[v.q])
+          table.insert(new_sents, sent)
+
         end
       
       end
