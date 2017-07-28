@@ -82,6 +82,15 @@ function utils.is_empty(t)
   return next(t) == nil
 end
 
+function utils.shallow_copy(t)
+  ret = {}
+  for k, v in pairs(t) do
+    ret[k] = v
+  end
+  return ret
+end
+
+
 function utils.change(t)
   local c = {}
   local h = {}

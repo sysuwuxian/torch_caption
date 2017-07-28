@@ -182,11 +182,77 @@ function net_utils.decode_sequence(ix_to_word, seq)
   return out
 end
 
+function net_utils.copy_list(lst)
+  local new = {}
+  for k,v in pairs(lst) do
+    new[k] = v
+  end
+
+  return new
+end
+
+function net_utils.copy_tree(tree)
+
+  local n = tree.n
+  local dim = tree.dim
+  local len = tree.len
+  local ptr = tree.ptr
+
+  local new_tree = Tree(n, dim, len, ptr)
+
+  new_tree:set(tree.feat, tree.mask)
+
+  -- copy head and leaf
+  new_tree.head = tree.head:clone()
+  new_tree.leaf = tree.leaf:clone()
+
+  -- copy word2region, region2h
+  new_tree.word2region = net_utils.copy_list(tree.word2region)
+  new_tree.region2h = net_utils.copy_list(tree.region2h)
+
+  -- copy node
+  new_tree.node = net_utils.clone_list(tree.node)
+
+  return new_tree
+end
+
+
+function net_utils.copy_config(config)
+ 
+  -- lazy for init
+  local sent = torch.Tensor(1):zero() 
+  local new_config = Config()
+  -- update new config
+  new_config.stack = net_utils.copy_list(config.stack)
+  new_config.buffer = net_utils.copy_list(config.buffer)
+ 
+
+  -- copy the tree
+  local t = config.tree
+  
+  new_config.tree.n = t.n
+  new_config.tree.head = net_utils.copy_list(t.head)
+  new_config.tree.label = net_utils.copy_list(t.label)
+
+  return new_config
+
+end
+
+
 function net_utils.clone_list(lst)
+  -- change for recursive struture
   -- takes list of tensors, clone all
   local new = {}
   for k,v in pairs(lst) do
-    new[k] = v:clone()
+    if type(v) == 'table' then
+      local rec = {}
+      for k1,v1 in pairs(v) do
+        rec[k1] = v1:clone()
+      end
+      new[k] = rec
+    else
+      new[k] = v:clone()
+    end
   end
   return new
 end

@@ -98,7 +98,7 @@ function layer:sample_beam(input, opt)
   self.core:forget()
   self.tree_module:forget()
   
-  local beam_size = utils.getopt(opt, 'beam_size', 2)
+  local beam_size = utils.getopt(opt, 'beam_size', 1)
   local init_state = input[1]
   local all_trees = input[2]
   local nlp_model = input[3]
@@ -119,30 +119,22 @@ function layer:sample_beam(input, opt)
     local configs = {}
     local sents = {}
     local states = {}
+
+    -- initial tree / state / configs / sents
     trees[1] = all_trees[k]
-
-    for i=1, beam_size do
-      states[i] = {init_state[1][k]:clone(), init_state[2][k]:clone()}
-      configs[i] = system:initialConfig(self.seq_length)
-      sents[i] = {}
-      -- init tree
-      if i > 1 then
-        trees[i] = Tree(trees[1].n, trees[1].dim, trees[1].len, 
-               trees[1].ptr, trees[1].vid_name)
-        trees[i]:set(trees[1].feat, trees[1].mask)
-      end
-    end
+    states[1] = {init_state[1][k]:clone(), init_state[2][k]:clone()}
+    configs[1] = system:initialConfig(self.seq_length)
+    sents[1] = {}
+    
     local beam_logprobs_sum = torch.zeros(beam_size)
-
     local logprobs -- logprobs predicted in last time step, shape (beam_size, vocab_size + 1)
     local done_beams = {}
 
     -- set begin rows, start with 1
     local rows = 1
 
-    -- print for test
-    local test_iter = 0
     while true do
+      
       local cols = math.min(beam_size, self.vocab_size)
       local candidates = {}
       if rows == 0 then
@@ -155,7 +147,7 @@ function layer:sample_beam(input, opt)
         local config = configs[q]
         local state = states[q]
         local sent = sents[q]
-
+        
         local feats = torch.Tensor(utils.getChenFeat(#self.voc, config, sent))
         feats = feats:cuda()
         local probs = torch.exp(nlp_model:forward(feats):float())
@@ -164,11 +156,16 @@ function layer:sample_beam(input, opt)
         local max_prob = 0
         local numTrans = 3
         for j = 1, numTrans do
-          if probs[1][j] > max_prob and system:canApply(c, j) then
+          if probs[1][j] > max_prob and system:canApply(config, j) then
              max_prob = probs[1][j]
              trans_state = j
           end
         end
+
+
+
+        -- print for debug
+        print('trans state is ', trans_state)
 
         if trans_state == 1 then
 
@@ -201,14 +198,6 @@ function layer:sample_beam(input, opt)
           -- mapping current word to corresponding region
           tree.word2region[cnt] = id[1][1]
           
-          -- copying for next use
-          if utils.is_empty(sent) then 
-            for j = 2, beam_size do
-              trees[j].word2region[cnt] = id[1][1]
-              states[j] = {state[1]:clone(), state[2]:clone()}
-            end
-          end
-
           ys,ix = torch.sort(logprobs,true)
 
           for c=1,cols do
@@ -220,7 +209,7 @@ function layer:sample_beam(input, opt)
         
         elseif trans_state == 2 then
           -- left arc
-          local son, fa = unpack(c:getTop())
+          local son, fa = unpack(config:getTop())
           tree:setHead(son, fa, self.tree_module)
           local local_logprob = 0.0
           local candidate_logprob = beam_logprobs_sum[q] + local_logprob
@@ -229,15 +218,13 @@ function layer:sample_beam(input, opt)
 
         elseif trans_state == 3 then
           -- right arc
-          local fa, son = unpack(c:getTop())
+          local fa, son = unpack(config:getTop())
           tree:setHead(son, fa, self.tree_module)
           local local_logprob = 0.0
           local candidate_logprob = beam_logprobs_sum[q] + local_logprob
           table.insert(candidates, {c=-1, q=q, p=candidate_logprob, r=local_logprob})
         end
         system:apply(config, trans_state)
-     
-        print('tran state is ', trans_state)
       end
 
       table.sort(candidates, compare)
@@ -252,7 +239,7 @@ function layer:sample_beam(input, opt)
       for vix=1, beam_size do
         local v = candidates[vix]
         -- append new end terminal at the end of beam
-        local sent = utils.shallow_copy(sents[v.q])
+        local sent = net_utils.copy_list(sents[v.q])
         if v.c ~= -1 then
           table.insert(sent, v.c)
         end
@@ -263,13 +250,11 @@ function layer:sample_beam(input, opt)
                         p = beam_logprobs_sum[vix]})
         
         elseif not system:isterminal(configs[v.q]) then
-          
           -- update new states / tress / configs
-          table.insert(new_states, states[v.q])
-          table.insert(new_trees, trees[v.q])
-          table.insert(new_configs, configs[v.q])
+          table.insert(new_states, net_utils.clone_list(states[v.q]))
+          table.insert(new_trees, net_utils.copy_tree(trees[v.q]))
+          table.insert(new_configs, net_utils.copy_config(configs[v.q]))
           table.insert(new_sents, sent)
-
         end
       
       end
@@ -335,9 +320,15 @@ function layer:sample(input)
     local lstm_state = {}
     local cnt = 1
     local sent = {}
+
+    local test_iter = 0
+
     while not system:isterminal(c) do
       -- get two word in stack
       -- get the feat in the config
+      test_iter = test_iter + 1
+    
+
       local feats = torch.Tensor(utils.getChenFeat(#self.voc, c, sent))
       feats = feats:cuda()
       local probs = torch.exp(nlp_model:forward(feats):float())
@@ -350,6 +341,8 @@ function layer:sample(input)
           state = j
         end
       end
+      
+      print('state is ', state)
       
       if state == 1 then
         local it, word
@@ -402,6 +395,7 @@ function layer:sample(input)
         break
       end
       system:apply(c, state)
+
     end
     -- tree:save()
   end
