@@ -133,6 +133,9 @@ function layer:sample_beam(input, opt)
     -- set begin rows, start with 1
     local rows = 1
 
+
+    local test_iter = 0
+
     while true do
       
       local cols = math.min(beam_size, self.vocab_size)
@@ -140,7 +143,8 @@ function layer:sample_beam(input, opt)
       if rows == 0 then
         break
       end
-
+      test_iter = test_iter + 1
+      
       for q=1,rows do -- for each beam expansion
         -- local config, tree, t
         local tree = trees[q]
@@ -163,9 +167,9 @@ function layer:sample_beam(input, opt)
         end
 
 
-
-        -- print for debug
-        print('trans state is ', trans_state)
+        -- print trans state
+        print('-----------------------------') 
+        print('state is ', trans_state)
 
         if trans_state == 1 then
 
@@ -178,7 +182,8 @@ function layer:sample_beam(input, opt)
             word = sent[#sent]
           end
           it = torch.LongTensor(1):fill(word)
-          
+         
+
           local inputs = {it, tree.feat, tree.mask, unpack(state)}
 
           local out = self.core:forward(inputs)
@@ -197,6 +202,8 @@ function layer:sample_beam(input, opt)
           local cnt = #tree.word2region + 1
           -- mapping current word to corresponding region
           tree.word2region[cnt] = id[1][1]
+          
+          print('word is ', cnt, ' region is ', id[1][1])
           
           ys,ix = torch.sort(logprobs,true)
 
@@ -219,6 +226,7 @@ function layer:sample_beam(input, opt)
         elseif trans_state == 3 then
           -- right arc
           local fa, son = unpack(config:getTop())
+
           tree:setHead(son, fa, self.tree_module)
           local local_logprob = 0.0
           local candidate_logprob = beam_logprobs_sum[q] + local_logprob
@@ -235,8 +243,9 @@ function layer:sample_beam(input, opt)
       local new_trees = {}
       local new_configs = {}
       local new_sents = {}
+      
       -- update new beams
-      for vix=1, beam_size do
+      for vix=1, math.min(beam_size, #candidates) do
         local v = candidates[vix]
         -- append new end terminal at the end of beam
         local sent = net_utils.copy_list(sents[v.q])
@@ -321,13 +330,13 @@ function layer:sample(input)
     local cnt = 1
     local sent = {}
 
-    local test_iter = 0
 
+    local test_iter = 0
     while not system:isterminal(c) do
       -- get two word in stack
       -- get the feat in the config
+   
       test_iter = test_iter + 1
-    
 
       local feats = torch.Tensor(utils.getChenFeat(#self.voc, c, sent))
       feats = feats:cuda()
@@ -341,8 +350,6 @@ function layer:sample(input)
           state = j
         end
       end
-      
-      print('state is ', state)
       
       if state == 1 then
         local it, word
@@ -360,7 +367,7 @@ function layer:sample(input)
         end
         -- shift -> soft attention to generator the next word
         -- get the corresponding inputs, mask, is_leaf for backward
-        
+
         local inputs = {it, tree.feat, tree.mask, unpack(lstm_state)}
 
         local out = self.core:forward(inputs)
@@ -378,15 +385,16 @@ function layer:sample(input)
         -- find the relation between word and region
         local att_w = out[self.num_state+2]:float() 
         local _, id = torch.max(att_w, 2)
+        
         -- mapping current word to corresponding region
         tree.word2region[cnt] = id[1][1]
+        
         cnt = cnt + 1
       
       elseif state == 2 then
         -- left arc
         local son, fa = unpack(c:getTop())
         tree:setHead(son, fa, self.tree_module)
-      
       elseif state == 3 then
         -- right arc
         local fa, son = unpack(c:getTop())
@@ -403,10 +411,10 @@ function layer:sample(input)
 end
 
 function layer:updateOutput(input)
-  
+
   self.core:forget()
   self.tree_module:forget()
-
+  
   local init_state = input[1]
   
   -- seq is T * N
