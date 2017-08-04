@@ -109,12 +109,12 @@ function layer:sample_beam(input, opt)
 
   assert(beam_size <= self.vocab_size+1, 'lets assume this for now')
   local seq = torch.LongTensor(self.seq_length, batch_size):zero()
-
   
   local system = arcstandard()
 
   for k=1, batch_size do 
     -- init tree / config / sent
+
     local trees = {}
     local configs = {}
     local sents = {}
@@ -132,9 +132,8 @@ function layer:sample_beam(input, opt)
 
     -- set begin rows, start with 1
     local rows = 1
-
-
-    local test_iter = 0
+   
+    local iter = 1
 
     while true do
       
@@ -143,7 +142,6 @@ function layer:sample_beam(input, opt)
       if rows == 0 then
         break
       end
-      test_iter = test_iter + 1
       
       for q=1,rows do -- for each beam expansion
         -- local config, tree, t
@@ -151,7 +149,7 @@ function layer:sample_beam(input, opt)
         local config = configs[q]
         local state = states[q]
         local sent = sents[q]
-        
+       
         local feats = torch.Tensor(utils.getChenFeat(#self.voc, config, sent))
         feats = feats:cuda()
         local probs = torch.exp(nlp_model:forward(feats):float())
@@ -166,10 +164,10 @@ function layer:sample_beam(input, opt)
           end
         end
 
-
+        max_prob = torch.log(torch.log(max_prob))
+        max_prob = 0.0
         -- print trans state
-        print('-----------------------------') 
-        print('state is ', trans_state)
+        --print('iter is ', iter, ' state is ', trans_state)
 
         if trans_state == 1 then
 
@@ -183,7 +181,6 @@ function layer:sample_beam(input, opt)
           end
           it = torch.LongTensor(1):fill(word)
          
-
           local inputs = {it, tree.feat, tree.mask, unpack(state)}
 
           local out = self.core:forward(inputs)
@@ -203,13 +200,11 @@ function layer:sample_beam(input, opt)
           -- mapping current word to corresponding region
           tree.word2region[cnt] = id[1][1]
           
-          print('word is ', cnt, ' region is ', id[1][1])
-          
           ys,ix = torch.sort(logprobs,true)
 
           for c=1,cols do
             -- compute logprob of expanding beam q with word in sorted position c
-            local local_logprob = ys[{c}]
+            local local_logprob = ys[{c}] + max_prob
             local candidate_logprob = beam_logprobs_sum[q] + local_logprob
             table.insert(candidates, {c=ix[c], q=q, p=candidate_logprob, r=local_logprob})
           end
@@ -218,23 +213,25 @@ function layer:sample_beam(input, opt)
           -- left arc
           local son, fa = unpack(config:getTop())
           tree:setHead(son, fa, self.tree_module)
-          local local_logprob = 0.0
+          local local_logprob = max_prob
           local candidate_logprob = beam_logprobs_sum[q] + local_logprob
           table.insert(candidates, {c=-1, q=q, p=candidate_logprob, r=local_logprob})
-
 
         elseif trans_state == 3 then
           -- right arc
           local fa, son = unpack(config:getTop())
 
           tree:setHead(son, fa, self.tree_module)
-          local local_logprob = 0.0
+          local local_logprob = max_prob
           local candidate_logprob = beam_logprobs_sum[q] + local_logprob
           table.insert(candidates, {c=-1, q=q, p=candidate_logprob, r=local_logprob})
         end
         system:apply(config, trans_state)
+      
       end
 
+
+      iter = iter + 1
       table.sort(candidates, compare)
         
       -- construct new states and new trees 
@@ -257,8 +254,9 @@ function layer:sample_beam(input, opt)
         if v.c == self.vocab_size+1 or system:isterminal(configs[v.q]) then  
           table.insert(done_beams, {seq = torch.Tensor(sents[v.q]), 
                         p = beam_logprobs_sum[vix]})
+        end 
         
-        elseif not system:isterminal(configs[v.q]) then
+        if not system:isterminal(configs[v.q]) then
           -- update new states / tress / configs
           table.insert(new_states, net_utils.clone_list(states[v.q]))
           table.insert(new_trees, net_utils.copy_tree(trees[v.q]))
@@ -323,6 +321,7 @@ function layer:sample(input)
   -- lstm output is "I was a boy #" 
   -- enumarate the tree
   for i = 1, batch_size do
+    
     local tree = trees[i]
     local c = system:initialConfig(self.seq_length)
     
@@ -331,13 +330,10 @@ function layer:sample(input)
     local sent = {}
 
 
-    local test_iter = 0
     while not system:isterminal(c) do
       -- get two word in stack
       -- get the feat in the config
-   
-      test_iter = test_iter + 1
-
+      
       local feats = torch.Tensor(utils.getChenFeat(#self.voc, c, sent))
       feats = feats:cuda()
       local probs = torch.exp(nlp_model:forward(feats):float())
@@ -403,7 +399,7 @@ function layer:sample(input)
         break
       end
       system:apply(c, state)
-
+    
     end
     -- tree:save()
   end
