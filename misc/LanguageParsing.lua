@@ -470,7 +470,9 @@ function layer:updateOutput(input)
         -- get the corresponding inputs, mask, is_leaf for backward
         
         self.inputs[i][cnt] = {it, tree.feat, tree.mask, unpack(self.state[cnt-1])}
-        self.mask[i][t] = tree.mask 
+        -- notice it can be a reference
+        -- so we need to clone it
+        self.mask[i][t] = tree.mask:clone() 
 
         local out = self.core:forward(self.inputs[i][cnt])
         self.output[cnt][i] = out[self.num_state+1]
@@ -553,7 +555,7 @@ function layer:updateGradInput(input, gradOutput)
 
     for t = self.diff_max[i], 1, -1 do
         local trans = transition[i][t] 
-        if trans == 1 then
+        if trans == 1 or trans == 2 then
           -- get father
           if self.merge_node[i][t] ~= nil then
             tokenIndex = self.merge_node[i][t]
@@ -566,19 +568,6 @@ function layer:updateGradInput(input, gradOutput)
             end
 
             tree:update_backward(tokenIndex, self.tree_module, dnode_h, dnode_c, dfeat)  
-          end
-        elseif trans == 2 then
-          if self.merge_node[i][t] ~= nil then
-            tokenIndex = self.merge_node[i][t]
-
-            if dnode_h[tokenIndex] == nil then
-              dnode_h[tokenIndex] = torch.CudaTensor(dim):fill(0)
-            end
-            if dnode_c[tokenIndex] == nil then
-              dnode_c[tokenIndex] = torch.CudaTensor(dim):fill(0)
-            end
-
-            tree:update_backward(tokenIndex, self.tree_module, dnode_h, dnode_c, dfeat) 
           end
         elseif trans == 0 then
           local dout = {}
@@ -597,7 +586,7 @@ function layer:updateGradInput(input, gradOutput)
           for k = 1, att_num do
             if self.mask[i][t][k] == 0 then
               if tree:is_origin_region(k) then
-                utils.add(dfeat[key], dinputs[2][k])
+                utils.add(dfeat[k], dinputs[2][k])
               else
                 local node_id = tree.region2h[k]
                 utils.add(dnode_h[node_id], dinputs[2][k])
