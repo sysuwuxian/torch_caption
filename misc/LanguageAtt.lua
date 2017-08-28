@@ -24,7 +24,7 @@ function layer:__init(opt)
   self.img_seq_size = utils.getopt(opt, 'att_seq_size')
   
   -- create the core lstm network. note +1 for both the START and END tokens
-  
+
   if opt.useLSTM then
     model = LSTM.lstm_att(self.input_encoding_size, self.input_size_img, self.img_seq_size, 
           self.vocab_size + 1, self.rnn_size, self.num_layers, dropout)
@@ -159,8 +159,10 @@ function layer:updateOutput(input)
         can_skip = true
       end
     end
+    
     if not can_skip then
       self.inputs[t] = {it, att_img, att_mask, unpack(self.state[t-1])}
+      
       local out = self.core:forward(self.inputs[t])
       --[[
       local mask_module = self.core:findModules('nn.maskSoftMax')
@@ -186,7 +188,7 @@ function layer:sample_beam(input)
   local att_img = input[2]
   local att_mask = input[3]
 
-  local beam_size = utils.getopt(opt, 'beam_size', 4)
+  local beam_size = utils.getopt(opt, 'beam_size', 3)
   local batch_size = input[1][1]:size(1)
 
   local function compare(a,b) return a.p > b.p end -- used downstream

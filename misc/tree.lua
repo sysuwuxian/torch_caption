@@ -1,5 +1,6 @@
 require 'torch'
 local utils = require 'misc.utils'
+local net_utils = require 'misc.net_utils'
 local Tree = torch.class('Tree')
 
 function Tree:__init(n, dim, len, ptr, vid_name)
@@ -43,6 +44,7 @@ function Tree:set(feat, mask)
   self.mask:copy(mask)
 end
 
+
 function Tree:save()
   --print the corresponding tree
   tree_fold = './tree_fold'
@@ -62,27 +64,46 @@ function Tree:child(index)
   return child
 end
 
-function Tree:update_forward(id, son, tree_lstm)
-
-  for k, v in pairs(son) do   
-    self.mask[self.word2region[v]] = 1 
+function Tree:update_node(tree_lstm, f, c, h)
+  if tree_lstm.train ~= false then 
+    return tree_lstm:forward{f, c, h}
+  else
+    return net_utils.clone_list(tree_lstm:forward{f, c, h})
   end
-  self.mask[self.word2region[id]] = 0
+end
 
+
+
+function Tree:update_forward(id, son, tree_lstm)
+ 
+
+  -- update the mask 
+  --for k, v in pairs(son) do   
+  --  self.mask[self.word2region[v]] = 1
+  --end
+  --self.mask[self.word2region[id]] = 1
+  
   for k, v in pairs(son) do
     if self.leaf[v] == 1 then
+      
       local child_c, child_h = self:get_child_states(self:child(v))
-      self.node[v] = tree_lstm:forward{self.feat[self.word2region[v]], child_c, child_h}
+      
+      self.node[v] = self:update_node(tree_lstm, self.feat[self.word2region[v]],
+              child_c, child_h)
     end
   end
-  
+
   local child_c, child_h = self:get_child_states(son)
-  self.node[id] = tree_lstm:forward{self.feat[self.word2region[id]], child_c, child_h}
+  
+  self.node[id] = self:update_node(tree_lstm, self.feat[self.word2region[id]], 
+              child_c, child_h)
 
   -- update the region
   self.ptr = self.ptr + 1
-  self.feat[self.ptr] = self.node[id][2]
-  self.mask[self.ptr] = 0
+  -- fix the feat
+  -- so we best clone
+  self.feat[self.ptr] = self.node[id][2]:clone()
+  --self.mask[self.ptr] = 0 
   self.region2h[self.ptr] = id
 end
 
@@ -99,35 +120,38 @@ function Tree:update_backward(id,  tree_lstm, dnode_h, dnode_c, dfeat)
   local region = self.word2region[id]
   
   local composer_grad = tree_lstm:backward({self.feat[region], child_c, child_h}, 
-      {dnode_h[id], dnode_c[id]})
+      {dnode_c[id], dnode_h[id]})
 
   if self:is_origin_region(region) == true then
-      utils.add(dfeat[region], composer_grad[1])
+      dfeat[region] = utils.add(dfeat[region], composer_grad[1])
   else
       local node_id = self.region2h[region]
-      utils.add(dnode_h[node_id], composer_grad[1])
+      dnode_h[node_id] = utils.add(dnode_h[node_id], composer_grad[1])
   end
 
   local child_c_grads, child_h_grads = composer_grad[2], composer_grad[3]
-  
+
   for i = 1, #son do
-    utils.add(dnode_c[son[i]], child_c_grads[i])
-    utils.add(dnode_h[son[i]], child_h_grads[i])
+    dnode_c[son[i]] = utils.add(dnode_c[son[i]], child_c_grads[i])
+    dnode_h[son[i]] = utils.add(dnode_h[son[i]], child_h_grads[i])
   end
 
   for k, v in pairs(son) do
     if self.leaf[v] == 1 then
+
       local region = self.word2region[v]
       local child_c, child_h = self:get_child_states(self:child(v))
       local composer_grad = tree_lstm:backward({self.feat[region], child_c, child_h}, 
-        {dnode_h[id], dnode_c[id]})
+        {dnode_c[v], dnode_h[v]})
 
       if self:is_origin_region(region) == true then
-          utils.add(dfeat[region], composer_grad[1])
+          dfeat[region] = utils.add(dfeat[region], composer_grad[1])
       else
           local node_id = self.region2h[region]
-          utils.add(dnode_h[node_id], composer_grad[1])
+          dnode_h[node_id] = utils.add(dnode_h[node_id], composer_grad[1])
       end
+      -- not need to backward to child
+      -- since no child 
     end
   end
 
@@ -148,7 +172,12 @@ function Tree:get_child_states(child)
   return child_c, child_h
 end
 
+
 function Tree:setHead(tokenIndex, headIndex, module)
+ 
+  -- print for debug
+  -- print('u-->v is ', tokenIndex, '-->', headIndex)
+
   self.head[tokenIndex] = headIndex
   if headIndex == 0 then
     return false
@@ -162,5 +191,4 @@ function Tree:setHead(tokenIndex, headIndex, module)
   else
       return false
   end
-
 end

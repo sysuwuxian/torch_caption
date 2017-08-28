@@ -25,6 +25,7 @@ function layer:__init(opt, voc)
   self.input_size_img = utils.getopt(opt, 'input_encoding_size')
   self.img_seq_size = utils.getopt(opt, 'att_seq_size')
   
+  
   -- create the core lstm network. note +1 for both the START and END tokens
   
   if opt.useLSTM then
@@ -410,7 +411,7 @@ function layer:updateOutput(input)
 
   self.core:forget()
   self.tree_module:forget()
-  
+
   local init_state = input[1]
   
   -- seq is T * N
@@ -434,6 +435,7 @@ function layer:updateOutput(input)
 
   local batch_size = seq:size(2)
   local trans_num = transitions:size(2) 
+
 
   self.output:resize(self.seq_length+1, batch_size, self.vocab_size+1)
 
@@ -487,6 +489,7 @@ function layer:updateOutput(input)
 
         -- mapping current word to corresponding region
         tree.word2region[cnt] = id[1][1]
+        
         cnt = cnt + 1
 
         if utils.is_empty(config.buffer) == true then
@@ -566,7 +569,6 @@ function layer:updateGradInput(input, gradOutput)
             if dnode_h[tokenIndex] == nil then
               dnode_h[tokenIndex] = torch.CudaTensor(dim):fill(0)
             end
-
             tree:update_backward(tokenIndex, self.tree_module, dnode_h, dnode_c, dfeat)  
           end
         elseif trans == 0 then
@@ -586,10 +588,10 @@ function layer:updateGradInput(input, gradOutput)
           for k = 1, att_num do
             if self.mask[i][t][k] == 0 then
               if tree:is_origin_region(k) then
-                utils.add(dfeat[k], dinputs[2][k])
+                dfeat[k] = utils.add(dfeat[k], dinputs[2][k])
               else
                 local node_id = tree.region2h[k]
-                utils.add(dnode_h[node_id], dinputs[2][k])
+                dnode_h[node_id] = utils.add(dnode_h[node_id], dinputs[2][k])
               end
             end
           end
@@ -606,5 +608,6 @@ function layer:updateGradInput(input, gradOutput)
       end
     end
   end
+  
   self.gradInput = {{dc0, dh0}, dimgs, torch.Tensor(), torch.Tensor()} 
 end
