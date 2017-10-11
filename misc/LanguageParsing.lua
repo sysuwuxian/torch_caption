@@ -26,6 +26,9 @@ function layer:__init(opt, voc)
   self.img_seq_size = utils.getopt(opt, 'att_seq_size')
   
   
+  -- whether use cuda
+  self.use_cuda = utils.getopt(opt, 'use_cuda')
+
   -- create the core lstm network. note +1 for both the START and END tokens
   
   if opt.useLSTM then
@@ -420,7 +423,10 @@ function layer:updateOutput(input)
   
   -- transition is N * transition
   local transitions = input[4]
+
   local configs = input[5]
+
+
 
   local att_seq_size = self.img_seq_size
   
@@ -436,7 +442,6 @@ function layer:updateOutput(input)
   local batch_size = seq:size(2)
   local trans_num = transitions:size(2) 
 
-
   self.output:resize(self.seq_length+1, batch_size, self.vocab_size+1)
 
 
@@ -446,6 +451,8 @@ function layer:updateOutput(input)
 
   -- enumarate the tree
   for i = 1, batch_size do
+    
+    
     local tree = trees[i]
     local config = configs[i]
 
@@ -456,10 +463,10 @@ function layer:updateOutput(input)
     
     for t = 1, trans_num do
       local state = transitions[i][t]
+      --print('config len is ', #config.buffer)
       if state == 0 then
         -- config operation
         config:shift()
-        
         local it, word
         if cnt == 1 then
           word = self.vocab_size + 1
@@ -470,8 +477,13 @@ function layer:updateOutput(input)
         it = torch.LongTensor(1):fill(word)
         -- shift -> soft attention to generator the next word
         -- get the corresponding inputs, mask, is_leaf for backward
-        
+       
+        -- print tree mask for debug
+        --print('tree feat is ', tree.feat)
+        --print('tree mask is ', tree.mask)
+
         self.inputs[i][cnt] = {it, tree.feat, tree.mask, unpack(self.state[cnt-1])}
+
         -- notice it can be a reference
         -- so we need to clone it
         self.mask[i][t] = tree.mask:clone() 
@@ -537,15 +549,22 @@ function layer:updateGradInput(input, gradOutput)
 
   local dim = self.tree[1].feat:size(2)
 
-  local dimgs = torch.CudaTensor(batch_size, att_num, dim):fill(0)
+  local dimgs = torch.Tensor(batch_size, att_num, dim):fill(0)
  
-  local dc0 = torch.CudaTensor(batch_size, self.rnn_size):fill(0)
-  local dh0 = torch.CudaTensor(batch_size, self.rnn_size):fill(0)
+  local dc0 = torch.Tensor(batch_size, self.rnn_size):fill(0)
+  local dh0 = torch.Tensor(batch_size, self.rnn_size):fill(0)
+
+
+  if self.use_cuda then
+    dimgs = dimgs:cuda()
+    dc0 = dc0:cuda()
+    dh0 = dh0:cuda()
+  end
 
   -- get the trainsition 
-  local transition = input[3]
+  local transition = input[4]
 
-  local trans_num = input[3]:size(1)
+  local trans_num = input[4]:size(1)
 
   for i = batch_size, 1, -1 do
     local dstate = {[self.tmax[i]] = self.zero_state}
@@ -556,33 +575,48 @@ function layer:updateGradInput(input, gradOutput)
     local dnode_c = {}
     local dfeat = {}
 
+
+    
     for t = self.diff_max[i], 1, -1 do
+
         local trans = transition[i][t] 
         if trans == 1 or trans == 2 then
           -- get father
+          
           if self.merge_node[i][t] ~= nil then
             tokenIndex = self.merge_node[i][t]
             
             if dnode_c[tokenIndex] == nil then
-              dnode_c[tokenIndex] = torch.CudaTensor(dim):fill(0)
+              dnode_c[tokenIndex] = torch.Tensor(dim):fill(0)
+              if self.use_cuda then
+                dnode_c[tokenIndex] = dnode_c[tokenIndex]:cuda()
+              end
             end
             if dnode_h[tokenIndex] == nil then
-              dnode_h[tokenIndex] = torch.CudaTensor(dim):fill(0)
+              dnode_h[tokenIndex] = torch.Tensor(dim):fill(0)
+              if self.use_cuda then
+               dnode_h[tokenIndex] = dnode_h[tokenIndex]:cuda() 
+              end
+            
             end
             tree:update_backward(tokenIndex, self.tree_module, dnode_h, dnode_c, dfeat)  
           end
+          
         elseif trans == 0 then
           local dout = {}
           for k = 1, #dstate[cnt] do table.insert(dout, dstate[cnt][k]) end
           table.insert(dout, gradOutput[cnt][i])
           -- notice we need backward zero Tensor
-          local zeroTensor = torch.CudaTensor(att_num):zero()
-
+          local zeroTensor = torch.Tensor(att_num):zero()
+          if self.use_cuda then
+            zeroTensor = zeroTensor:cuda()
+          end
           table.insert(dout, zeroTensor)
           local dinputs = self.core:backward(self.inputs[cnt], dout)
           dstate[cnt-1] = {}
           for k = 4, self.num_state+3 do table.insert(dstate[cnt-1], dinputs[k]) end
 
+          
           -- online change the dinput0
           -- enumarte the attention part 
           for k = 1, att_num do
@@ -595,6 +629,7 @@ function layer:updateGradInput(input, gradOutput)
               end
             end
           end
+          
           cnt = cnt - 1
           if cnt == 0 then
             dc0[i] = dstate[cnt][1]
@@ -602,11 +637,13 @@ function layer:updateGradInput(input, gradOutput)
           end
         end
     end
+    
     for k = 1, att_num do
       if dfeat[k] ~= nil then
         dimgs[i][k] = dfeat[k]
       end
     end
+    
   end
   
   self.gradInput = {{dc0, dh0}, dimgs, torch.Tensor(), torch.Tensor()} 
