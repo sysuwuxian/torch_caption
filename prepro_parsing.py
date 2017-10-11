@@ -32,11 +32,11 @@ def float_line_to_stream(line):
 def get_split(params):
     split = open(params['split_list'], 'r')
     lines = split.readlines()
-    split = [] 
+    split = []
     for line in lines:
         vid = line.strip()
         split.append(vid)
-    return split 
+    return split
 
 def get_list(params):
    input_file = open(params['input_list'], 'r')
@@ -52,9 +52,7 @@ def get_list(params):
    for line in lines:
        vid_name = line.split()[0]
        vid_num = line.split()[1]
-       # for some coding reason
-       att_num = line.split()[2] 
-       #att_num = 1
+       att_num = line.split()[2]
        max_att_num = max(max_att_num, int(att_num))
 
        vid_frame[vid_name] = vid_num
@@ -133,8 +131,18 @@ def encode_captions(file_list,  params, wtoi):
   
   L = np.concatenate(label_arrays, axis=0) # put all the labels together
 
+  print 'count sz is ', counter
   print 'encoded captions to array of size ', `L.shape`
   return L, label_start_ix, label_end_ix 
+
+def count(array, num, flag):
+    cnt = 0
+    for i in range(array.shape[0]):
+        if flag and array[i] == num:
+            cnt += 1
+        elif not flag and array[i] != num:
+            cnt += 1
+    return cnt
 
 def encode_groupfeats(file_list, att_frame, params):
  
@@ -147,12 +155,7 @@ def encode_groupfeats(file_list, att_frame, params):
 
   # get group features
   for i, vid in enumerate(file_list):
-
-      if i % 1000 == 0:
-          print 'has processed ' + str(i) + '\n'
-      #print vid
       n = int(att_frame[vid]) 
-      
       file_name = params['group_dir'] + '/' + vid + '.txt'
 
       Fi = np.zeros((n, feat_dim), dtype = np.float32) 
@@ -164,7 +167,6 @@ def encode_groupfeats(file_list, att_frame, params):
           Fi[idx, :] = np.array(float_line_to_stream(line))
           idx += 1
       fid.close()
-      assert(n == idx)
 
       feat_arrays.append(Fi)
       feat_start_ix[i] = cnt
@@ -180,14 +182,13 @@ def main(params):
   # start from the 1
   id2vid = {i+1:vid for i,vid in enumerate(file_list)}
 
+  split_list = get_split(params)
+  split2id = {vid:i+1 for i, vid in enumerate(split_list)}
+  
+  
+  
+  
   # tokenization and preprocessing
-
-
-  # get split data
-  # split_list = get_split(params)
-  # split2id = {vid:i+1 for i,vid in enumerate(split_list)}
-
-
 
   # create the vocab
   vocab = build_vocab(params)
@@ -209,6 +210,18 @@ def main(params):
   f.create_dataset("labels", dtype='uint32', data=L)
   f.create_dataset("label_start_ix", dtype='uint32', data=label_start_ix)
   f.create_dataset("label_end_ix", dtype='uint32', data=label_end_ix)
+  # read hdf5 file 
+  file = h5py.File(params['input_hdf5'], 'r')
+  T = file['state'][:] 
+  file.close()
+  print T.shape
+  f.create_dataset("trans", dtype=np.int32, data=T)
+
+  assert(T.shape[0] == L.shape[0])
+  # assert sum 0 is equal to sum 1
+  # for i in range(T.shape[0]):
+  #   assert(count(T[i], 0, True) == count(L[i], 0, False))
+  
   f.close()
 
   f = h5py.File(params['output_feat_h5'], "w")
@@ -225,7 +238,7 @@ def main(params):
   out['ind_to_vid'] = id2vid 
   out['vid_to_num'] = vid_frame
   out['att_to_num'] = att_frame
-  #out['split_to_id'] = split2id
+  out['split_to_id'] = split2id
 
   json.dump(out, open(params['output_json'], 'w'))
   print 'wrote ', params['output_json']
@@ -235,19 +248,20 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser()
 
   # input list
-  parser.add_argument('--input_list', default='./data/train_gp.txt')
-  # split file txt
-  # parser.add_argument('--split_list', default='../charades/split/split_train.txt', help='split file list')
-  
+  parser.add_argument('--input_list', default='./data/train_parsing_charades.txt', help='input file list')
+  parser.add_argument('--split_list', default='../charades/split/split_train.txt', help='split file list')
+
+  # add for parsing
+  parser.add_argument('--input_hdf5', default='./nlp/output.h5', help='input_hdf5_file')
   parser.add_argument('--output_json', default='./data/data.json', help='output json file')
   parser.add_argument('--output_h5', default='./data/data.h5', help='output h5 file')
   parser.add_argument('--output_feat_h5', default='./data/data_feat.h5', help='output h5 file')
-  parser.add_argument('--group_dir', default='../data/res_group_feat', help='group dir')
-  parser.add_argument('--voc', default='../data/vocabulary.txt', help='input dictionaty')
+  parser.add_argument('--group_dir', default='../charades_data/data_group/res_group_charads', help='group dir')
+  parser.add_argument('--voc', default='../charades/voc.txt', help='input dictionaty')
   parser.add_argument('--feat_dim', default=2048, type=int, help='group feat') 
-  parser.add_argument('--sentence', default = '../data/sents.txt', help='input sentence')
+  parser.add_argument('--sentence', default = '../charades/charades_sent.txt', help='input sentence')
   # options
-  parser.add_argument('--max_length', default=20, type=int, help='max length of a caption, in number of words. captions longer than this get clipped.')
+  parser.add_argument('--max_length', default=60, type=int, help='max length of a caption, in number of words. captions longer than this get clipped.')
   parser.add_argument('--word_count_threshold', default=5, type=int, help='only words that occur more than this number of times will be put in vocab')
   
   args = parser.parse_args()
