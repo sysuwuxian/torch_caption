@@ -56,7 +56,7 @@ def get_list(params):
        max_att_num = max(max_att_num, int(att_num))
 
        vid_frame[vid_name] = vid_num
-       att_frame[vid_name] = att_num
+       att_frame[vid_name] = str(int(att_num) + 1)
        file_list.append(vid_name)
    
    print('max num is ', max_att_num)
@@ -182,8 +182,8 @@ def main(params):
   # start from the 1
   id2vid = {i+1:vid for i,vid in enumerate(file_list)}
 
-  split_list = get_split(params)
-  split2id = {vid:i+1 for i, vid in enumerate(split_list)}
+  # split_list = get_split(params)
+  # split2id = {vid:i+1 for i, vid in enumerate(split_list)}
   
   
   
@@ -238,7 +238,7 @@ def main(params):
   out['ind_to_vid'] = id2vid 
   out['vid_to_num'] = vid_frame
   out['att_to_num'] = att_frame
-  out['split_to_id'] = split2id
+  # out['split_to_id'] = split2id
 
   json.dump(out, open(params['output_json'], 'w'))
   print 'wrote ', params['output_json']
@@ -248,20 +248,20 @@ if __name__ == "__main__":
   parser = argparse.ArgumentParser()
 
   # input list
-  parser.add_argument('--input_list', default='./data/train_parsing_charades.txt', help='input file list')
+  parser.add_argument('--input_list', default='./data/train_parsing.txt', help='input file list')
   parser.add_argument('--split_list', default='../charades/split/split_train.txt', help='split file list')
 
   # add for parsing
-  parser.add_argument('--input_hdf5', default='./nlp/output.h5', help='input_hdf5_file')
-  parser.add_argument('--output_json', default='./data/data.json', help='output json file')
-  parser.add_argument('--output_h5', default='./data/data.h5', help='output h5 file')
-  parser.add_argument('--output_feat_h5', default='./data/data_feat.h5', help='output h5 file')
-  parser.add_argument('--group_dir', default='../charades_data/data_group/res_group_charads', help='group dir')
-  parser.add_argument('--voc', default='../charades/voc.txt', help='input dictionaty')
+  parser.add_argument('--input_hdf5', default='./nlp/output_msvd.h5', help='input_hdf5_file')
+  parser.add_argument('--output_json', default='./data/msvd_parsing_data/data.json', help='output json file')
+  parser.add_argument('--output_h5', default='./data/msvd_parsing_data/data.h5', help='output h5 file')
+  parser.add_argument('--output_feat_h5', default='./data/msvd_parsing_data/data_feat.h5', help='output h5 file')
+  parser.add_argument('--group_dir', default='../data/res_group_feat', help='group dir')
+  parser.add_argument('--voc', default='../data/vocabulary.txt', help='input dictionaty')
   parser.add_argument('--feat_dim', default=2048, type=int, help='group feat') 
-  parser.add_argument('--sentence', default = '../charades/charades_sent.txt', help='input sentence')
+  parser.add_argument('--sentence', default = '../data/sent_msvd.txt', help='input sentence')
   # options
-  parser.add_argument('--max_length', default=60, type=int, help='max length of a caption, in number of words. captions longer than this get clipped.')
+  parser.add_argument('--max_length', default=20, type=int, help='max length of a caption, in number of words. captions longer than this get clipped.')
   parser.add_argument('--word_count_threshold', default=5, type=int, help='only words that occur more than this number of times will be put in vocab')
   
   args = parser.parse_args()
